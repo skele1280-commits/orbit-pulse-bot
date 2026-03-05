@@ -274,14 +274,26 @@ def download_video(url):
         temp_dir = tempfile.gettempdir()
         temp_file = os.path.join(temp_dir, f"orbit_{os.urandom(4).hex()}")
         
-        # Check for cookies from environment variable (easier than file upload)
-        yt_cookies = os.getenv("YOUTUBE_COOKIES")
-        if yt_cookies and len(yt_cookies) > 100:
-            # Write cookies to temp file
-            cookies_path = os.path.join(temp_dir, f"cookies_{os.urandom(4).hex()}.txt")
-            with open(cookies_path, "w") as f:
-                f.write(yt_cookies)
-            print(f"[DOWNLOAD] Using YouTube cookies from environment")
+        # Check for cookies file (Railway volume mount or local)
+        possible_paths = [
+            "/app/cookies_filtered.txt",  # Railway volume
+            os.path.join(os.path.dirname(__file__), "cookies_filtered.txt"),  # Local
+        ]
+        
+        for path in possible_paths:
+            if os.path.exists(path) and os.path.getsize(path) > 200:
+                cookies_path = path
+                print(f"[DOWNLOAD] Using YouTube cookies from {path}")
+                break
+        
+        # Fallback: Check environment variable
+        if not cookies_path:
+            yt_cookies = os.getenv("YOUTUBE_COOKIES")
+            if yt_cookies and len(yt_cookies) > 100:
+                cookies_path = os.path.join(temp_dir, f"cookies_{os.urandom(4).hex()}.txt")
+                with open(cookies_path, "w") as f:
+                    f.write(yt_cookies)
+                print(f"[DOWNLOAD] Using YouTube cookies from environment")
         
         # Add flags to bypass age restrictions and improve success rate
         cmd = [

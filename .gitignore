@@ -5,3 +5,4 @@ __pycache__/
 *.pyc
 .DS_Store
 cookies.txt
+cookies_filtered.txt
