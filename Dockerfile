@@ -14,7 +14,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy bot code
-COPY main.py technical_analysis.py universal_downloader.py ./
+COPY main.py technical_analysis.py simple_downloader.py ./
 
 # Run bot
 CMD ["python", "main.py"]
