@@ -1,1 +1,1 @@
-worker: node telegram-bot-buttons.js
+worker: python main.py
