@@ -91,17 +91,126 @@ def get_signal(rsi_value, price_trend):
         return {"signal": "⚪ HOLD", "strength": "weak", "reason": f"Neutral (RSI {rsi_value:.1f})"}
 
 
-def format_analysis(coin_name, current_price, rsi, trend, signal_info, change_24h):
+def get_support_resistance(current_price, change_24h, market_cap, volume):
+    """Calculate support and resistance levels"""
+    # Simple calculation based on 24h range
+    range_percent = abs(change_24h) / 2
+    support = current_price * (1 - range_percent / 100)
+    resistance = current_price * (1 + range_percent / 100)
+    return support, resistance
+
+
+def get_trend_description(change_1h, change_24h):
+    """Generate trend description for different timeframes"""
+    trends = {}
+    
+    # 1H trend
+    if change_1h > 2:
+        trends["1H"] = "🟢 Bullish"
+    elif change_1h < -2:
+        trends["1H"] = "🔴 Bearish"
+    else:
+        trends["1H"] = "⚪ Neutral"
+    
+    # 24H trend
+    if change_24h > 3:
+        trends["1D"] = "🟢 Strong Bullish"
+    elif change_24h > 0:
+        trends["1D"] = "🟢 Mildly Bullish"
+    elif change_24h < -3:
+        trends["1D"] = "🔴 Strong Bearish"
+    else:
+        trends["1D"] = "🔴 Mildly Bearish"
+    
+    # 4H (interpolate)
+    change_4h = change_24h * (4 / 24)
+    if change_4h > 1.5:
+        trends["4H"] = "🟢 Bullish"
+    elif change_4h < -1.5:
+        trends["4H"] = "🔴 Bearish"
+    else:
+        trends["4H"] = "⚪ Neutral"
+    
+    return trends
+
+
+def format_pro_analysis(coin_name, current_price, change_1h, change_24h, market_cap, volume, rsi, trend, signal_info):
     """
-    Format analysis into readable message
+    Format professional trader analysis
     
     Returns:
-        str: Formatted analysis text
+        str: Formatted PRO TRADER SUMMARY
     """
-    msg = f"📊 {coin_name} Analysis\n"
-    msg += f"💰 Price: ${current_price:,.2f}\n"
-    msg += f"24h Change: {change_24h:+.2f}%\n\n"
-    msg += f"📈 RSI: {rsi:.1f} ({trend})\n"
-    msg += f"Signal: {signal_info['signal']} ({signal_info['strength']})\n"
-    msg += f"Reason: {signal_info['reason']}\n"
+    support, resistance = get_support_resistance(current_price, change_24h, market_cap, volume)
+    trends = get_trend_description(change_1h, change_24h)
+    
+    msg = f"🤖 PRO TRADER SUMMARY\n"
+    msg += f"━━━━━━━━━━━━━━━━━━━━━\n"
+    msg += f"📊 {coin_name} — ${current_price:,.2f}\n\n"
+    
+    # TREND ANALYSIS
+    msg += f"📈 TREND ANALYSIS\n"
+    msg += f" 1H: {trends['1H']} — {change_1h:+.2f}%\n"
+    msg += f" 4H: {trends['4H']} — Interpolated\n"
+    msg += f" 1D: {trends['1D']} — {change_24h:+.2f}%\n\n"
+    
+    # SUPPORT & RESISTANCE
+    msg += f"🎯 SUPPORT & RESISTANCE\n"
+    msg += f" Support: ${support:,.2f}\n"
+    msg += f" Resistance: ${resistance:,.2f}\n"
+    invalidation = support * 0.99
+    msg += f" ⚠️ Invalidation: below ${invalidation:,.2f}\n\n"
+    
+    # SIGNAL
+    signal_emoji = signal_info['signal'].split()[0]  # Get emoji
+    msg += f"⚡ SIGNAL: {signal_info['signal']}\n"
+    
+    if change_24h > 0:
+        msg += f"Price up {abs(change_24h):.2f}% with momentum. Watch for continuation.\n\n"
+    else:
+        msg += f"Price down {abs(change_24h):.2f}%. Monitor support levels.\n\n"
+    
+    # KEY METRICS
+    msg += f"📊 Key Metrics:\n"
+    if market_cap:
+        mcap_str = format_mcap(market_cap)
+        msg += f" • Market Cap: {mcap_str}\n"
+    if volume:
+        vol_str = format_mvol(volume)
+        msg += f" • 24h Volume: {vol_str}\n"
+    
+    msg += f" • 24h Change: {change_24h:+.2f}%\n"
+    msg += f" • RSI: {rsi:.1f} ({trend})\n"
+    msg += f" • Trend: {signal_info['strength'].upper()}\n\n"
+    
+    msg += f"⏱ {datetime.now().strftime('%Y-%m-%d %H:%M UTC')} | Source: CoinGecko\n"
+    msg += f"⚠️ Not financial advice. DYOR."
+    
     return msg
+
+
+def format_mcap(mcap):
+    """Format market cap"""
+    if not mcap:
+        return "N/A"
+    if mcap >= 1e12:
+        return f"${mcap / 1e12:.2f}T"
+    elif mcap >= 1e9:
+        return f"${mcap / 1e9:.2f}B"
+    elif mcap >= 1e6:
+        return f"${mcap / 1e6:.2f}M"
+    return f"${mcap:,.0f}"
+
+
+def format_mvol(vol):
+    """Format volume"""
+    if not vol:
+        return "N/A"
+    if vol >= 1e9:
+        return f"${vol / 1e9:.2f}B"
+    elif vol >= 1e6:
+        return f"${vol / 1e6:.2f}M"
+    return f"${vol:,.0f}"
+
+
+from datetime import datetime

@@ -21,7 +21,7 @@ from telegram.ext import (
 )
 
 # Import new modules
-from technical_analysis import calculate_rsi, detect_trend, get_signal, format_analysis
+from technical_analysis import calculate_rsi, detect_trend, get_signal, format_analysis, format_pro_analysis
 from universal_downloader import detect_platform, get_media_info, download_media, format_size, suggest_format
 
 # ============================================
@@ -437,6 +437,11 @@ async def download_format_input(update: Update, context: ContextTypes.DEFAULT_TY
     """Process format choice and download"""
     choice = update.message.text.strip()
     
+    # Validate choice exists
+    if not context.user_data.get("platform"):
+        await update.message.reply_text("❌ Session expired. Send /download again.")
+        return ConversationHandler.END
+    
     formats = suggest_format(
         context.user_data["platform"]["platform"],
         context.user_data["platform"]["type"]
@@ -453,17 +458,31 @@ async def download_format_input(update: Update, context: ContextTypes.DEFAULT_TY
     
     format_choice = formats[choice_idx]
     url = context.user_data["download_url"]
+    platform = context.user_data["platform"]["platform"]
     
-    await update.message.reply_text(
-        f"⏳ Downloading as {format_choice}...\n(May take a minute)"
+    status_msg = await update.message.reply_text(
+        f"⏳ Downloading {platform}...\n"
+        f"Format: {format_choice}\n"
+        f"This may take 1-2 minutes..."
     )
     
     # Download (no temp files, direct streaming)
-    result = download_media(url, format_choice)
+    try:
+        result = download_media(url, format_choice)
+    except Exception as e:
+        await status_msg.edit_text(
+            f"❌ Download failed\n\n"
+            f"Error: {str(e)[:150]}\n\n"
+            f"Try another link or /cancel."
+        )
+        return DOWNLOAD_LINK
     
     if not result["success"]:
-        await update.message.reply_text(f"❌ {result['error']}")
-        await update.message.reply_text("Try another link or /cancel.")
+        await status_msg.edit_text(
+            f"❌ Download failed\n\n"
+            f"Error: {result['error']}\n\n"
+            f"Try another link or /cancel."
+        )
         return DOWNLOAD_LINK
     
     # Send file directly (no temp storage)
@@ -473,10 +492,16 @@ async def download_format_input(update: Update, context: ContextTypes.DEFAULT_TY
         file_data = BytesIO(result["data"])
         file_data.name = result["filename"]
         
+        await status_msg.edit_text(
+            f"✅ Download successful!\n"
+            f"Size: {format_size(result['size'])}\n"
+            f"Sending to you..."
+        )
+        
         if "MP4" in format_choice or result["filename"].endswith(".mp4"):
             await update.message.reply_video(
                 file_data,
-                caption=f"✅ {format_size(result['size'])}"
+                caption=f"✅ Downloaded\n{format_size(result['size'])}"
             )
         elif "MP3" in format_choice or result["filename"].endswith(".mp3"):
             await update.message.reply_audio(
@@ -486,19 +511,26 @@ async def download_format_input(update: Update, context: ContextTypes.DEFAULT_TY
         elif "JPG" in format_choice or result["filename"].endswith((".jpg", ".png")):
             await update.message.reply_photo(
                 file_data,
-                caption=f"✅ {format_size(result['size'])}"
+                caption=f"✅ Downloaded\n{format_size(result['size'])}"
             )
         else:
             await update.message.reply_document(
                 file_data,
-                caption=f"✅ {format_size(result['size'])}"
+                caption=f"✅ Downloaded\n{format_size(result['size'])}"
             )
         
-        await update.message.reply_text("Send another link or /cancel.")
+        await update.message.reply_text(
+            "✅ Complete!\n\n"
+            "Send another link or /cancel."
+        )
         return DOWNLOAD_LINK
     
     except Exception as e:
-        await update.message.reply_text(f"❌ Failed to send: {str(e)}")
+        await update.message.reply_text(
+            f"❌ Failed to send file\n\n"
+            f"Error: {str(e)[:150]}\n\n"
+            f"The download worked but couldn't send. Try again or /cancel."
+        )
         return DOWNLOAD_LINK
 
 
@@ -619,20 +651,28 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Analyze
         current_price = coin.get("current_price", 0)
+        change_1h = coin.get("price_change_percentage_1h_in_currency", 0)
         change_24h = coin.get("price_change_percentage_24h_in_currency", 0)
+        market_cap = coin.get("market_cap", 0)
+        volume = coin.get("total_volume", 0)
+        
         prices = [current_price * (1 - change_24h/100), current_price]
         
         rsi = calculate_rsi(prices)
         trend = detect_trend(prices)
         signal_info = get_signal(rsi, trend)
         
-        analysis = format_analysis(
+        # Use professional analysis
+        analysis = format_pro_analysis(
             coin.get("name", ""),
             current_price,
+            change_1h,
+            change_24h,
+            market_cap,
+            volume,
             rsi,
             trend,
-            signal_info,
-            change_24h
+            signal_info
         )
         
         await query.edit_message_text(analysis)
