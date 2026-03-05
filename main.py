@@ -272,7 +272,16 @@ def download_video(url):
         temp_dir = tempfile.gettempdir()
         temp_file = os.path.join(temp_dir, f"orbit_{os.urandom(4).hex()}")
         
-        cmd = ["yt-dlp", "-f", "best", "-o", f"{temp_file}.%(ext)s", url]
+        # Add flags to bypass age restrictions and improve success rate
+        cmd = [
+            "yt-dlp",
+            "--no-check-certificate",
+            "--age-limit", "99",
+            "-f", "best[height<=720]",  # Limit to 720p for faster downloads
+            "--no-playlist",
+            "-o", f"{temp_file}.%(ext)s",
+            url
+        ]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         
         if result.returncode != 0:
@@ -497,7 +506,6 @@ async def pulse(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     # Browse mode
-    await update.message.reply_text("📊 Loading top 50 coins...")
     coins = fetch_top_coins(50)
     
     if not coins:
@@ -520,8 +528,6 @@ async def pulse(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ============================================
 async def winner(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show top 3 gainers"""
-    await update.message.reply_text("🔍 Finding top gainers...")
-    
     gainers = fetch_top_gainers()
     
     if not gainers:
