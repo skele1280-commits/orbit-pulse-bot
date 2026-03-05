@@ -609,16 +609,31 @@ async def pulse(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⏳ Data unavailable - try again")
         return
     
-    msg = "📊 **Top Cryptocurrencies (by 24h Volume)**\n\n"
-    for i, coin in enumerate(coins[:20], 1):
+    # Show first 10 with pagination
+    page = 0
+    page_size = 10
+    start = page * page_size
+    end = start + page_size
+    
+    msg = "📊 **Top Cryptocurrencies**\n\n"
+    for i, coin in enumerate(coins[start:end], start + 1):
         name = coin.get("name", "Unknown")[:12]
         symbol = coin.get("symbol", "???").upper()
         price = fmt_price(coin.get("current_price"))
         change = fmt_change(coin.get("price_change_percentage_24h_in_currency"))
         msg += f"{i}. **{name}** ({symbol})\n   {price} | {change}\n\n"
     
-    msg += f"\nShowing 20/{len(coins)} coins\nUse /pulse [coin] to search"
-    await update.message.reply_text(msg)
+    msg += f"Page {page + 1}/{(len(coins) + page_size - 1) // page_size}"
+    
+    # Add pagination buttons
+    keyboard = []
+    if end < len(coins):
+        keyboard.append(InlineKeyboardButton("Next →", callback_data=f"pulse_page_{page + 1}"))
+    
+    if keyboard:
+        await update.message.reply_text(msg, reply_markup=InlineKeyboardMarkup([keyboard]))
+    else:
+        await update.message.reply_text(msg)
 
 # ============================================
 # /winner COMMAND
@@ -777,6 +792,52 @@ async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ Chat history cleared")
 
 # ============================================
+# PAGINATION CALLBACK
+# ============================================
+async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle pagination button presses"""
+    query = update.callback_query
+    await query.answer()
+    
+    data = query.data
+    
+    # Handle pulse pagination
+    if data.startswith("pulse_page_"):
+        page = int(data.split("_")[-1])
+        coins = fetch_top_coins(100)
+        
+        if not coins:
+            await query.edit_message_text("⏳ Data unavailable")
+            return
+        
+        page_size = 10
+        start = page * page_size
+        end = start + page_size
+        total_pages = (len(coins) + page_size - 1) // page_size
+        
+        msg = "📊 **Top Cryptocurrencies**\n\n"
+        for i, coin in enumerate(coins[start:end], start + 1):
+            name = coin.get("name", "Unknown")[:12]
+            symbol = coin.get("symbol", "???").upper()
+            price = fmt_price(coin.get("current_price"))
+            change = fmt_change(coin.get("price_change_percentage_24h_in_currency"))
+            msg += f"{i}. **{name}** ({symbol})\n   {price} | {change}\n\n"
+        
+        msg += f"Page {page + 1}/{total_pages}"
+        
+        # Build navigation buttons
+        keyboard = []
+        if page > 0:
+            keyboard.append(InlineKeyboardButton("← Prev", callback_data=f"pulse_page_{page - 1}"))
+        if end < len(coins):
+            keyboard.append(InlineKeyboardButton("Next →", callback_data=f"pulse_page_{page + 1}"))
+        
+        if keyboard:
+            await query.edit_message_text(msg, reply_markup=InlineKeyboardMarkup([keyboard]))
+        else:
+            await query.edit_message_text(msg)
+
+# ============================================
 # ALERT CHECKER (Background)
 # ============================================
 async def check_alerts(context: ContextTypes.DEFAULT_TYPE):
@@ -852,6 +913,9 @@ def main():
     app.add_handler(CommandHandler("gpt", gpt_cmd))
     app.add_handler(CommandHandler("ask", ask_cmd))
     app.add_handler(CommandHandler("clear", clear_history))
+    
+    # Callback buttons (pagination)
+    app.add_handler(CallbackQueryHandler(handle_callback))
     
     # Link detection
     app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r"^https?://"), handle_link))
