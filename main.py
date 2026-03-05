@@ -268,9 +268,20 @@ def detect_platform(url):
 def download_video(url):
     """Download video using yt-dlp"""
     temp_file = None
+    cookies_path = None
+    
     try:
         temp_dir = tempfile.gettempdir()
         temp_file = os.path.join(temp_dir, f"orbit_{os.urandom(4).hex()}")
+        
+        # Check for cookies from environment variable (easier than file upload)
+        yt_cookies = os.getenv("YOUTUBE_COOKIES")
+        if yt_cookies and len(yt_cookies) > 100:
+            # Write cookies to temp file
+            cookies_path = os.path.join(temp_dir, f"cookies_{os.urandom(4).hex()}.txt")
+            with open(cookies_path, "w") as f:
+                f.write(yt_cookies)
+            print(f"[DOWNLOAD] Using YouTube cookies from environment")
         
         # Add flags to bypass age restrictions and improve success rate
         cmd = [
@@ -281,11 +292,9 @@ def download_video(url):
             "-o", f"{temp_file}.%(ext)s",
         ]
         
-        # Add cookies if available (for age-restricted videos)
-        cookies_file = os.path.join(os.path.dirname(__file__), "cookies.txt")
-        if os.path.exists(cookies_file) and os.path.getsize(cookies_file) > 200:
-            cmd.extend(["--cookies", cookies_file])
-            print(f"[DOWNLOAD] Using cookies from {cookies_file}")
+        # Add cookies if available
+        if cookies_path:
+            cmd.extend(["--cookies", cookies_path])
         
         cmd.append(url)
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
@@ -327,6 +336,7 @@ def download_video(url):
     except Exception as e:
         return {"success": False, "error": str(e)[:100]}
     finally:
+        # Cleanup downloaded files
         if temp_file:
             for ext in [".mp4", ".mkv", ".webm", ".m4a", ".mp3", ""]:
                 try:
@@ -335,6 +345,13 @@ def download_video(url):
                         os.remove(path)
                 except:
                     pass
+        
+        # Cleanup temp cookies file
+        if cookies_path and os.path.exists(cookies_path):
+            try:
+                os.remove(cookies_path)
+            except:
+                pass
 
 # ============================================
 # COMMANDS
