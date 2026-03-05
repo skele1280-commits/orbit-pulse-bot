@@ -487,12 +487,22 @@ async def grab(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = data["url"]
     platform = data["platform"]
     
+    print(f"[GRAB] User {user_id} downloading from {platform}: {url[:80]}")
+    
     status = await update.message.reply_text(f"⏳ Downloading from {platform}...\nPlease wait (1-2 min)")
     
     result = download_video(url)
     
+    print(f"[GRAB] Result: success={result.get('success')}, error={result.get('error', 'none')[:80]}")
+    
     if not result["success"]:
-        await status.edit_text(f"❌ Failed: {result['error']}")
+        error_detail = result.get('error', 'Unknown error')
+        await status.edit_text(
+            f"❌ Download failed\n\n"
+            f"Error: {error_detail}\n\n"
+            f"Platform: {platform}\n"
+            f"If age-restricted, cookies may need refresh."
+        )
         return
     
     try:
