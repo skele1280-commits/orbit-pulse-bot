@@ -276,12 +276,18 @@ def download_video(url):
         cmd = [
             "yt-dlp",
             "--no-check-certificate",
-            "--age-limit", "99",
             "-f", "best[height<=720]",  # Limit to 720p for faster downloads
             "--no-playlist",
             "-o", f"{temp_file}.%(ext)s",
-            url
         ]
+        
+        # Add cookies if available (for age-restricted videos)
+        cookies_file = os.path.join(os.path.dirname(__file__), "cookies.txt")
+        if os.path.exists(cookies_file) and os.path.getsize(cookies_file) > 200:
+            cmd.extend(["--cookies", cookies_file])
+            print(f"[DOWNLOAD] Using cookies from {cookies_file}")
+        
+        cmd.append(url)
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         
         if result.returncode != 0:
