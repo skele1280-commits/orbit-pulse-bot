@@ -115,6 +115,40 @@ def coincap_fetch(endpoint, params=None):
         print(f"[CC_ERROR] {e}")
     return None
 
+def binance_fetch_top(limit=100):
+    """Binance public API - fastest, no auth needed"""
+    try:
+        # Get top coins by volume (24h)
+        url = "https://api.binance.com/api/v3/ticker/24hr"
+        resp = requests.get(url, timeout=5)
+        if resp.status_code != 200:
+            return None
+        
+        tickers = resp.json()
+        # Filter USDT pairs only
+        usdt_pairs = [t for t in tickers if t['symbol'].endswith('USDT')]
+        # Sort by quote volume (biggest first)
+        usdt_pairs.sort(key=lambda x: float(x.get('quoteVolume', 0)), reverse=True)
+        
+        coins = []
+        for i, ticker in enumerate(usdt_pairs[:limit]):
+            symbol = ticker['symbol'].replace('USDT', '')
+            coins.append({
+                "id": symbol.lower(),
+                "name": symbol,
+                "symbol": symbol,
+                "current_price": float(ticker.get('lastPrice', 0)),
+                "price_change_percentage_24h_in_currency": float(ticker.get('priceChangePercent', 0)),
+                "total_volume": float(ticker.get('quoteVolume', 0)),
+                "market_cap": None,  # Binance doesn't provide this
+            })
+        
+        print(f"[BINANCE] Fetched {len(coins)} coins")
+        return coins
+    except Exception as e:
+        print(f"[BINANCE_ERROR] {e}")
+        return None
+
 # ============================================
 # COIN DATA FETCHING
 # ============================================
@@ -135,14 +169,22 @@ def fetch_coin_list():
     return coin_list_cache or []
 
 def fetch_top_coins(limit=50):
-    """Fetch top coins with caching"""
+    """Fetch top coins with caching - tries Binance (fastest) first"""
     global pulse_cache, pulse_cache_time
     now = time.time()
     
     if pulse_cache and (now - pulse_cache_time) < PULSE_CACHE_TTL:
         return pulse_cache
     
-    # Try CoinGecko
+    # Try Binance first (fastest, most reliable)
+    binance_data = binance_fetch_top(limit)
+    if binance_data and len(binance_data) >= 5:
+        pulse_cache = binance_data
+        pulse_cache_time = now
+        return binance_data
+    
+    # Fallback to CoinGecko
+    print("[FALLBACK] Binance failed, trying CoinGecko...")
     data = cg_request(
         "/coins/markets",
         params={
@@ -160,8 +202,8 @@ def fetch_top_coins(limit=50):
         pulse_cache_time = now
         return data
     
-    # Fallback to CoinCap
-    print("[FALLBACK] Using CoinCap...")
+    # Final fallback to CoinCap
+    print("[FALLBACK] CoinGecko failed, trying CoinCap...")
     cc_data = coincap_fetch("/assets", {"limit": limit})
     if cc_data:
         normalized = []
@@ -179,9 +221,10 @@ def fetch_top_coins(limit=50):
         pulse_cache_time = now
         return normalized
     
+    # Return stale cache if everything fails
     return pulse_cache or []
 
-def fetch_top_gainers(limit=250, min_volume=100000):
+def fetch_top_gainers(limit=100, min_volume=100000):
     """Fetch top 3 gainers"""
     coins = fetch_top_coins(limit)
     
@@ -531,9 +574,8 @@ async def pulse(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Search mode
     if context.args:
         search_term = " ".join(context.args).lower().strip()
-        await update.message.reply_text(f"🔍 Searching for {search_term}...")
         
-        coins = fetch_top_coins(250)
+        coins = fetch_top_coins(100)
         found = None
         
         for coin in coins:
@@ -560,22 +602,22 @@ async def pulse(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(msg)
         return
     
-    # Browse mode
-    coins = fetch_top_coins(50)
+    # Browse mode - fetch 100 coins (Binance is fast enough)
+    coins = fetch_top_coins(100)
     
     if not coins:
         await update.message.reply_text("⏳ Data unavailable - try again")
         return
     
-    msg = "📊 **Top 50 Cryptocurrencies**\n\n"
-    for i, coin in enumerate(coins[:10], 1):
-        name = coin.get("name", "Unknown")[:15]
+    msg = "📊 **Top Cryptocurrencies (by 24h Volume)**\n\n"
+    for i, coin in enumerate(coins[:20], 1):
+        name = coin.get("name", "Unknown")[:12]
         symbol = coin.get("symbol", "???").upper()
         price = fmt_price(coin.get("current_price"))
         change = fmt_change(coin.get("price_change_percentage_24h_in_currency"))
         msg += f"{i}. **{name}** ({symbol})\n   {price} | {change}\n\n"
     
-    msg += f"\nShowing 10/{len(coins)} coins\nUse /pulse [coin] to search"
+    msg += f"\nShowing 20/{len(coins)} coins\nUse /pulse [coin] to search"
     await update.message.reply_text(msg)
 
 # ============================================
