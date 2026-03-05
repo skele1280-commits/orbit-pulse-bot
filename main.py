@@ -285,7 +285,17 @@ def download_video(url):
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         
         if result.returncode != 0:
-            return {"success": False, "error": "Download failed"}
+            error_msg = result.stderr.strip() if result.stderr else "Download failed"
+            
+            # Better error messages
+            if "Sign in to confirm" in error_msg or "age" in error_msg.lower():
+                return {"success": False, "error": "Age-restricted video (requires login)"}
+            elif "Video unavailable" in error_msg:
+                return {"success": False, "error": "Video unavailable or private"}
+            elif "429" in error_msg or "rate" in error_msg.lower():
+                return {"success": False, "error": "Rate limited - try again later"}
+            else:
+                return {"success": False, "error": error_msg[:80]}
         
         # Find downloaded file
         for ext in [".mp4", ".mkv", ".webm", ".m4a", ".mp3"]:
