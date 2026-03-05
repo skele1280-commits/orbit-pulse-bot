@@ -1,6 +1,16 @@
 {
+  "name": "orbit-pulse-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot with crypto analysis and media downloads",
+  "main": "telegram-bot-buttons.js",
+  "scripts": {
+    "start": "node telegram-bot-buttons.js",
+    "dev": "node telegram-bot-buttons.js"
+  },
   "dependencies": {
-    "express": "^5.2.1",
-    "ws": "^8.19.0"
+    "node-telegram-bot-api": "^0.61.0"
+  },
+  "engines": {
+    "node": "18.x"
   }
 }
