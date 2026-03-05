@@ -349,20 +349,76 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Help command"""
     await update.message.reply_text(
         "📖 ORBIT Pulse Bot\n\n"
-        "/pulse - Top 50 cryptocurrencies\n"
+        "📊 Crypto Commands:\n"
+        "/pulse - Browse top 50 cryptocurrencies\n"
+        "/pulse [coin] - Quick lookup (e.g., /pulse btc)\n\n"
+        "🎥 Media Downloads:\n"
+        "• Send any link (YouTube, TikTok, X, Facebook, Instagram)\n"
+        "• Bot auto-detects and downloads\n"
+        "• Supports video & audio\n\n"
+        "Other Commands:\n"
         "/help - This message\n"
         "/start - Welcome\n\n"
-        "Features:\n"
-        "✅ Click coin → See details\n"
-        "✅ Send link → Auto-download\n"
-        "   (YouTube, TikTok, Instagram, X, Facebook)"
+        "💡 Examples:\n"
+        "• /pulse sol → Solana analysis\n"
+        "• /pulse ethereum → ETH details\n"
+        "• Send TikTok link → Auto-download"
     )
 
 
 async def pulse(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show top 50 coins with pagination"""
+    """Show top 50 coins with pagination OR search for specific coin"""
     user_id = update.effective_user.id
     
+    # Check if user provided a coin name/symbol
+    if context.args and len(context.args) > 0:
+        search_term = " ".join(context.args).lower().strip()
+        
+        await update.message.reply_text(f"🔍 Searching for {search_term}...")
+        
+        # Fetch more coins for better search results
+        coins = fetch_top_coins(limit=250)
+        
+        if not coins:
+            await update.message.reply_text(
+                "⏳ Data temporarily unavailable — try again in a moment."
+            )
+            return
+        
+        # Search for matching coin
+        found_coin = None
+        for coin in coins:
+            coin_id = coin.get("id", "").lower()
+            coin_name = coin.get("name", "").lower()
+            coin_symbol = coin.get("symbol", "").lower()
+            
+            if search_term in coin_id or search_term in coin_name or search_term == coin_symbol:
+                found_coin = coin
+                break
+        
+        if not found_coin:
+            await update.message.reply_text(
+                f"❌ Coin '{search_term}' not found.\n\n"
+                "Try:\n"
+                "• /pulse btc\n"
+                "• /pulse solana\n"
+                "• /pulse shib\n\n"
+                "Or use /pulse to browse all coins."
+            )
+            return
+        
+        # Show coin analysis
+        analysis = simple_coin_analysis(
+            found_coin.get("name", "Unknown"),
+            found_coin.get("current_price", 0),
+            found_coin.get("price_change_percentage_24h_in_currency", 0),
+            found_coin.get("market_cap"),
+            found_coin.get("total_volume")
+        )
+        await update.message.reply_text(analysis)
+        return
+    
+    # No args - show paginated list
     await update.message.reply_text("📊 Loading top 50 coins...")
     coins = fetch_top_coins(limit=50)
     
